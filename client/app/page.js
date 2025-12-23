@@ -209,55 +209,105 @@ export default function Home() {
 
             {/* Balances */}
             {balances && (
-              <div className="mb-6">
-                <h3 className="text-xl font-bold mb-2">Balances</h3>
-                <div className="bg-gray-700 p-4 rounded">
-                  <h4 className="font-semibold mb-2">Totals by User:</h4>
-                  <ul className="space-y-1">
+              <div className="mb-6 bg-gray-700 p-4 rounded">
+                <h3 className="text-xl font-bold mb-4">💰 Balances & Settlements</h3>
+                
+                <div className="mb-4">
+                  <h4 className="font-semibold mb-2 text-sm text-gray-300">Who owes / is owed (Net):</h4>
+                  <ul className="space-y-2 mb-4">
                     {Object.entries(balances.totalsByUser).map(([uid, amt]) => {
                       const user = users.find(u => u.id === uid);
+                      let status = '';
+                      let color = '';
+                      if (amt > 0.01) {
+                        status = 'should receive';
+                        color = 'text-green-400';
+                      } else if (amt < -0.01) {
+                        status = 'owes';
+                        color = 'text-red-400';
+                      } else {
+                        status = 'settled';
+                        color = 'text-gray-400';
+                      }
                       return (
-                        <li key={uid} className={amt > 0 ? 'text-green-400' : 'text-red-400'}>
-                          {user?.name || uid}: ${amt.toFixed(2)}
+                        <li key={uid} className={`p-2 bg-gray-600 rounded flex justify-between items-center`}>
+                          <span>{user?.name || uid}</span>
+                          <span className={`font-bold ${color}`}>{status} ${Math.abs(amt).toFixed(2)}</span>
                         </li>
                       );
                     })}
                   </ul>
-                  <h4 className="font-semibold mt-4 mb-2">Simplified Payments:</h4>
-                  <ul className="space-y-1">
-                    {balances.simplified.map((edge, i) => {
-                      const fromUser = users.find(u => u.id === edge.fromUserId);
-                      const toUser = users.find(u => u.id === edge.toUserId);
-                      return (
-                        <li key={i}>
-                          {fromUser?.name} owes {toUser?.name}: ${edge.amount.toFixed(2)}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold mb-2 text-sm text-gray-300">Minimum Payments to Settle:</h4>
+                  {balances.simplified.length === 0 ? (
+                    <p className="text-gray-400 text-sm">Everyone is settled! ✓</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {balances.simplified.map((edge, i) => {
+                        const fromUser = users.find(u => u.id === edge.fromUserId);
+                        const toUser = users.find(u => u.id === edge.toUserId);
+                        return (
+                          <li key={i} className="p-2 bg-blue-600 rounded">
+                            <span className="font-semibold">{fromUser?.name}</span> pays 
+                            <span className="font-semibold"> {toUser?.name}</span>: 
+                            <span className="font-bold ml-2">${edge.amount.toFixed(2)}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Ledger */}
             <div>
-              <h3 className="text-xl font-bold mb-2">Ledger</h3>
-              <div className="space-y-2">
-                {ledger.map(entry => {
-                  const fromUser = users.find(u => u.id === entry.type.fromUserId);
-                  const toUser = users.find(u => u.id === entry.type.toUserId);
-                  return (
-                    <div key={entry.id} className="bg-gray-700 p-3 rounded text-sm">
-                      <div className="font-semibold">{entry.type.kind}</div>
-                      <div>
-                        {fromUser?.name} → {toUser?.name}: ${entry.type.amount.toFixed(2)}
+              <h3 className="text-xl font-bold mb-4">📋 Transaction Ledger</h3>
+              <div className="space-y-3">
+                {ledger.length === 0 ? (
+                  <p className="text-gray-400">No transactions yet</p>
+                ) : (
+                  ledger.map(entry => {
+                    const fromUser = users.find(u => u.id === entry.type.fromUserId);
+                    const toUser = users.find(u => u.id === entry.type.toUserId);
+                    const isExpense = entry.type.kind === "EXPENSE_SPLIT";
+                    const isSettlement = entry.type.kind === "SETTLEMENT";
+                    
+                    return (
+                      <div key={entry.id} className={`p-3 rounded text-sm ${isSettlement ? 'bg-green-700' : 'bg-gray-700'}`}>
+                        <div className="flex justify-between items-start mb-1">
+                          <div>
+                            <span className="font-bold">{isExpense ? '🧾 EXPENSE' : '✓ SETTLEMENT'}</span>
+                            {entry.metadata?.description && (
+                              <span className="text-gray-300 ml-2">• {entry.metadata.description}</span>
+                            )}
+                            {entry.metadata?.total && (
+                              <span className="text-gray-400 ml-2">• ${entry.metadata.total.toFixed(2)}</span>
+                            )}
+                          </div>
+                          <span className="text-gray-400 text-xs">{new Date(entry.createdAt).toLocaleString()}</span>
+                        </div>
+                        <div className="text-gray-200">
+                          {isExpense ? (
+                            <>
+                              <span className="font-semibold">{fromUser?.name}</span> owes 
+                              <span className="font-semibold"> {toUser?.name}</span>: 
+                              <span className="ml-2 font-bold text-yellow-300">${entry.type.amount.toFixed(2)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-semibold">{fromUser?.name}</span> paid 
+                              <span className="font-semibold"> {toUser?.name}</span>: 
+                              <span className="ml-2 font-bold text-green-300">${entry.type.amount.toFixed(2)}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      {entry.metadata?.description && (
-                        <div className="text-gray-400">{entry.metadata.description}</div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
