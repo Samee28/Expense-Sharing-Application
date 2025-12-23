@@ -9,9 +9,6 @@ const nextConfig = {
         }
       ]
     };
-  },
-  turbopack: {
-    root: '.'
   }
 };
 
