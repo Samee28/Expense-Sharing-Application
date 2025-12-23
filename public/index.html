@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Expense Sharing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #11172a;
+      --muted: #9aa3b2;
+      --text: #e8edf5;
+      --primary: #5b8cff;
+      --primary-600: #4a78ea;
+      --border: #232b3d;
+      --accent: #12d8ba;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #1b2140 0%, transparent 60%),
+                  radial-gradient(1000px 800px at 110% 10%, #152137 0%, transparent 50%),
+                  var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+    }
+    .container { max-width: 1080px; margin: 0 auto; }
+    header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+    h1 { margin: 0 0 8px; font-weight: 700; letter-spacing: 0.2px; }
+    h1 .accent { color: var(--accent); }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    section { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+    label { display: inline-block; min-width: 120px; color: var(--muted); font-size: 13px; }
+    input, select, textarea { padding: 8px 10px; margin: 4px 0; border-radius: 10px; border: 1px solid var(--border); background: #0e1426; color: var(--text); outline: none; transition: border-color .15s ease; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+    button { padding: 8px 14px; margin: 6px 0; cursor: pointer; border-radius: 10px; background: var(--primary); color: white; border: 1px solid var(--primary-600); font-weight: 600; letter-spacing: .2px; box-shadow: 0 6px 16px rgba(91,140,255,.25); transition: transform .05s ease, background .15s ease; }
+    button:hover { background: var(--primary-600); }
+    button:active { transform: translateY(1px); }
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .muted { color: var(--muted); }
+    pre { background: #0e1426; border: 1px solid var(--border); padding: 10px; overflow: auto; border-radius: 10px; }
+    table { border-collapse: collapse; width: 100%; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
+    thead { background: #0e1426; }
+    tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+    .pill { display: inline-block; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: #0e1426; margin: 2px 4px 2px 0; }
+    .toolbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Expense <span class="accent">Sharing</span></h1>
+      <div class="toolbar">
+        <div class="muted">Clean math • Clear ledger • Clear actions</div>
+        <div>
+          <button onclick="seedSample()">Add Sample Data</button>
+          <button onclick="refreshAll()">Refresh All</button>
+          <button style="background:#d64545; border-color:#b93b3b" onclick="resetAll()">Reset All Data</button>
+        </div>
+      </div>
+    </header>
+
+  <section>
+    <h2>1) Users</h2>
+    <div class="row">
+      <label for="userName">Name</label>
+      <input id="userName" placeholder="e.g., Alice" />
+      <button onclick="createUser()">Create User</button>
+      <button onclick="loadUsers()">Refresh</button>
+    </div>
+    <div id="usersList"></div>
+  </section>
+
+  <section>
+    <h2>2) Groups</h2>
+    <div class="row">
+      <label for="groupName">Name</label>
+      <input id="groupName" placeholder="e.g., Trip" />
+    </div>
+    <div class="row">
+      <label for="groupMembers">Members</label>
+      <select id="groupMembers" multiple size="6" style="min-width: 280px;"></select>
+      <div class="muted">Tip: Hold Ctrl (Cmd on Mac) to select multiple</div>
+    </div>
+    <div class="row">
+      <button onclick="createGroup()">Create Group</button>
+      <button onclick="loadGroups()">Refresh</button>
+    </div>
+    <div id="groupsList"></div>
+
+    <h3>Edit Group Members</h3>
+    <div class="row">
+      <label for="editGroupSelect">Group</label>
+      <select id="editGroupSelect" onchange="renderAvailableMembers()"></select>
+    </div>
+    <div class="row">
+      <label for="availableMembers">Add Members</label>
+      <select id="availableMembers" multiple size="6" style="min-width: 280px;"></select>
+      <button onclick="addMembersToGroup()">Add Selected</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>3) Add Expense</h2>
+    <div class="row">
+      <label for="expGroup">Group</label>
+      <select id="expGroup" onchange="onGroupChange()"></select>
+    </div>
+    <div class="row">
+      <label for="expPayer">Payer</label>
+      <select id="expPayer"></select>
+    </div>
+    <div class="row">
+      <label for="expAmount">Amount</label>
+      <input id="expAmount" type="number" min="0" step="0.01" value="120" />
+    </div>
+    <div class="row">
+      <label for="expDesc">Description</label>
+      <input id="expDesc" placeholder="e.g., Hotel" />
+    </div>
+    <div class="row">
+      <label for="expType">Split Type</label>
+      <select id="expType" onchange="renderSplits()">
+        <option value="EQUAL">EQUAL</option>
+        <option value="EXACT">EXACT</option>
+        <option value="PERCENT">PERCENT</option>
+      </select>
+    </div>
+    <div id="splitsContainer"></div>
+    <button onclick="addExpense()">Add Expense</button>
+  </section>
+
+  <section>
+    <h2>4) Settlement</h2>
+    <div class="row">
+      <label for="setGroup">Group</label>
+      <select id="setGroup" onchange="onSetGroupChange()"></select>
+    </div>
+    <div class="row">
+      <label for="setFrom">From</label>
+      <select id="setFrom"></select>
+      <label for="setTo">To</label>
+      <select id="setTo"></select>
+    </div>
+    <div class="row">
+      <label for="setAmount">Amount</label>
+      <input id="setAmount" type="number" min="0" step="0.01" value="40" />
+      <input id="setNote" placeholder="Note (optional)" />
+    </div>
+    <button onclick="addSettlement()">Record Settlement</button>
+  </section>
+
+  <section>
+    <h2>5) Balances & Ledger</h2>
+    <div class="row">
+      <label for="balGroup">Group</label>
+      <select id="balGroup"></select>
+      <button onclick="loadBalances()">Refresh Balances</button>
+      <button onclick="loadLedger()">Refresh Ledger</button>
+    </div>
+    <h3>Members & Nets</h3>
+    <div id="memberNets"></div>
+
+    <h3>Split Preview</h3>
+    <div id="splitPreview" class="muted">Adjust fields above to see per-user shares.</div>
+
+    <h3>Simplified (who pays whom)</h3>
+    <div class="row">
+      <button onclick="settleAll()">Settle All Suggestions</button>
+    </div>
+    <div id="simplified"></div>
+
+    <h3>Ledger</h3>
+    <div id="ledgerExpenses"></div>
+    <div id="ledgerSettlements" style="margin-top:12px;"></div>
+  </section>
+  </div>
+
+  <script>
+    const api = {
+      async get(path){ const r = await fetch(path); return r.json(); },
+      async post(path, body){ const r = await fetch(path,{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}); if(!r.ok){ const t = await r.text(); throw new Error(t); } return r.json(); }
+    };
+
+    let users = [];
+    let groups = [];
+
+    async function init(){
+      await loadUsers();
+      await loadGroups();
+      syncSelectors();
+      renderSplits();
+      await health();
+    }
+
+    async function health(){
+      try { await api.get('/health'); } catch {}
+    }
+
+    async function loadUsers(){
+      users = await api.get('/users');
+      const el = document.getElementById('usersList');
+      el.innerHTML = users.map(u => `<span class="pill">${u.name} (${u.id})</span>`).join(' ');
+      const members = document.getElementById('groupMembers');
+      members.innerHTML = users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+      syncSelectors();
+    }
+
+    async function createUser(){
+      const name = document.getElementById('userName').value.trim();
+      if(!name) return alert('Enter a name');
+      await api.post('/users', { name });
+      document.getElementById('userName').value = '';
+      loadUsers();
+    }
+
+    async function loadGroups(){
+      groups = await api.get('/groups');
+      const el = document.getElementById('groupsList');
+      el.innerHTML = groups.map(g => `<div>${g.name} — members: ${g.memberIds.map(id=>users.find(u=>u.id===id)?.name||id).join(', ')}</div>`).join('');
+      syncSelectors();
+    }
+
+    async function createGroup(){
+      const name = document.getElementById('groupName').value.trim();
+      const memberIds = [...document.getElementById('groupMembers').selectedOptions].map(o=>o.value);
+      if(!name || memberIds.length===0) return alert('Enter name and select members');
+      if(groups.some(g => g.name.toLowerCase() === name.toLowerCase())){ alert('Group name already exists. Use Edit Group Members below.'); return; }
+      await api.post('/groups', { name, memberIds });
+      document.getElementById('groupName').value = '';
+      loadGroups();
+    }
+
+    function syncSelectors(){
+      const groupOpts = groups.map(g=>`<option value="${g.id}">${g.name}</option>`).join('');
+      ['expGroup','setGroup','balGroup','editGroupSelect'].forEach(id=>{ const el = document.getElementById(id); if(el){ el.innerHTML = groupOpts; }});
+      onGroupChange();
+      onSetGroupChange();
+      renderAvailableMembers();
+    }
+
+    function renderAvailableMembers(){
+      const select = document.getElementById('editGroupSelect');
+      const gid = select && select.value;
+      const g = groups.find(x=>x.id===gid);
+      const avail = document.getElementById('availableMembers');
+      if(!avail) return;
+      if(!g){ avail.innerHTML = ''; return; }
+      const notInGroup = users.filter(u => !g.memberIds.includes(u.id));
+      avail.innerHTML = notInGroup.length ? notInGroup.map(u => `<option value="${u.id}">${u.name}</option>`).join('') : '<option disabled>No users to add</option>';
+    }
+
+    async function addMembersToGroup(){
+      const gid = document.getElementById('editGroupSelect').value;
+      const selected = [...document.getElementById('availableMembers').selectedOptions].map(o=>o.value);
+      if(!gid || selected.length===0) { alert('Select a group and one or more users.'); return; }
+      await api.post(`/groups/${gid}/members/bulk`, { userIds: selected });
+      await loadGroups();
+      renderAvailableMembers();
+      alert('Members added');
+    }
+
+    function onGroupChange(){
+      const gid = document.getElementById('expGroup').value;
+      const g = groups.find(x=>x.id===gid);
+      const payer = document.getElementById('expPayer');
+      payer.innerHTML = (g? g.memberIds:[]).map(id => `<option value="${id}">${users.find(u=>u.id===id)?.name||id}</option>`).join('');
+      renderSplits();
+      renderPreview();
+    }
+
+    function onSetGroupChange(){
+      const gid = document.getElementById('setGroup').value;
+      const g = groups.find(x=>x.id===gid);
+      const from = document.getElementById('setFrom');
+      const to = document.getElementById('setTo');
+      const opts = (g? g.memberIds:[]).map(id => `<option value="${id}">${users.find(u=>u.id===id)?.name||id}</option>`).join('');
+      from.innerHTML = opts; to.innerHTML = opts;
+    }
+
+    function renderSplits(){
+      const gid = document.getElementById('expGroup').value;
+      const g = groups.find(x=>x.id===gid);
+      const type = document.getElementById('expType').value;
+      const box = document.getElementById('splitsContainer');
+      const members = g? g.memberIds:[];
+      const header = type==='EQUAL' ? '(value=1 each, will auto-equalize)' : type==='EXACT' ? '(amounts)' : '(percents, total must be 100)';
+      box.innerHTML = `<div class="muted">Splits ${header}</div>` +
+        `<div class="grid">` +
+        members.map(id => {
+          const name = users.find(u=>u.id===id)?.name||id;
+          const def = type==='EQUAL'? 1 : 0;
+          return `<div style="display:contents">
+            <label>${name}</label>
+            <input data-split-user="${id}" type="number" step="0.01" value="${def}" oninput="renderPreview()" />
+          </div>`;
+        }).join('') + `</div>`;
+      renderPreview();
+    }
+
+    async function addExpense(){
+      const groupId = document.getElementById('expGroup').value;
+      const payerId = document.getElementById('expPayer').value;
+      const amount = parseFloat(document.getElementById('expAmount').value);
+      const description = document.getElementById('expDesc').value;
+      const splitType = document.getElementById('expType').value;
+      const inputs = [...document.querySelectorAll('[data-split-user]')];
+      const splits = inputs.map(inp => ({ userId: inp.getAttribute('data-split-user'), value: parseFloat(inp.value||'0') }));
+      try{
+        await api.post('/expenses', { groupId, payerId, amount, description, splitType, splits });
+        alert('Expense added');
+        await refreshBalancesAndLedger(groupId);
+      }catch(e){ alert(e.message || e); }
+    }
+
+    async function addSettlement(){
+      const groupId = document.getElementById('setGroup').value;
+      const fromUserId = document.getElementById('setFrom').value;
+      const toUserId = document.getElementById('setTo').value;
+      const amount = parseFloat(document.getElementById('setAmount').value);
+      const note = document.getElementById('setNote').value;
+      try{
+        await api.post('/settlements', { groupId, fromUserId, toUserId, amount, note });
+        alert('Settlement recorded');
+        loadBalances();
+        loadLedger();
+      }catch(e){ alert(e.message || e); }
+    }
+
+    async function loadBalances(){
+      const gid = document.getElementById('balGroup').value;
+      if(!gid) return;
+      const summary = await api.get(`/balances/${gid}`);
+      renderMemberNets(summary.totalsByUser);
+      const simp = document.getElementById('simplified');
+      simp.innerHTML = summary.simplified.length ? summary.simplified.map(e => {
+        const from = users.find(u=>u.id===e.fromUserId)?.name||e.fromUserId;
+        const to = users.find(u=>u.id===e.toUserId)?.name||e.toUserId;
+        const amt = e.amount.toFixed(2);
+        return `<div class="row" style="justify-content:space-between; border:1px solid var(--border); border-radius:10px; padding:8px; margin:6px 0; background:#0e1426;">
+          <div><b>${from}</b> pays <b>${to}</b>: $${amt}</div>
+          <div><button onclick=\"quickSettle('${gid}','${e.fromUserId}','${e.toUserId}',${e.amount})\">Settle</button></div>
+        </div>`;
+      }).join('') : '<div class="muted">No payments needed</div>';
+    }
+
+    async function loadLedger(){
+      const gid = document.getElementById('balGroup').value;
+      if(!gid) return;
+      const rows = await api.get(`/ledger/${gid}`);
+      // Group expenses by expenseId
+      const expenseMap = new Map(); // id -> { createdAt, desc, total, splitType, payerId, lines: [{fromId, amount}] }
+      const settlements = [];
+      for(const r of rows){
+        if(r.type.kind === 'EXPENSE_SPLIT'){
+          const key = r.type.expenseId;
+          if(!expenseMap.has(key)){
+            expenseMap.set(key, { createdAt: r.createdAt, desc: r.metadata?.description||'', total: r.metadata?.total||0, splitType: r.metadata?.splitType||'EQUAL', payerId: r.type.toUserId, lines: [] });
+          }
+          const g = expenseMap.get(key);
+          // keep earliest createdAt
+          if(new Date(r.createdAt) < new Date(g.createdAt)) g.createdAt = r.createdAt;
+          g.lines.push({ fromId: r.type.fromUserId, amount: r.type.amount });
+        } else if (r.type.kind === 'SETTLEMENT'){
+          settlements.push(r);
+        }
+      }
+      // Render expenses
+      const expEl = document.getElementById('ledgerExpenses');
+      const expenseCards = [...expenseMap.entries()].sort((a,b)=> new Date(a[1].createdAt) - new Date(b[1].createdAt)).map(([id, g]) => {
+        const payerName = users.find(u=>u.id===g.payerId)?.name || g.payerId;
+        const when = new Date(g.createdAt).toLocaleString();
+        const header = `<div class="row" style="justify-content:space-between; margin-bottom:6px;">
+            <div><span class="pill" style="border-color:#3b5bda; color:#AECBFF;">EXPENSE</span> <b>${escapeHtml(g.desc||'Expense')}</b> • $${fmt(g.total)} • ${g.splitType}</div>
+            <div class="muted">${when}</div>
+          </div>`;
+        const payerLine = `<div class="muted" style="margin-bottom:6px;">Payer: <b>${payerName}</b></div>`;
+        const lines = g.lines.map(l => {
+          const fromN = users.find(u=>u.id===l.fromId)?.name || l.fromId;
+          return `<div class="row" style="justify-content:space-between; padding:4px 0;">
+              <div>${fromN} owes ${payerName}</div>
+              <div>$${fmt(l.amount)}</div>
+            </div>`;
+        }).join('');
+        return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; background:#0e1426; margin:8px 0;">${header}${payerLine}${lines}</div>`;
+      }).join('');
+      expEl.innerHTML = expenseCards || '<div class="muted">No expenses yet</div>';
+
+      // Render settlements
+      const setEl = document.getElementById('ledgerSettlements');
+      const setHeader = settlements.length ? '<div class="muted" style="margin:8px 0;">Settlements</div>' : '';
+      const setCards = settlements.map(r => {
+        const fromN = users.find(u=>u.id===r.type.fromUserId)?.name || r.type.fromUserId;
+        const toN = users.find(u=>u.id===r.type.toUserId)?.name || r.type.toUserId;
+        const when = new Date(r.createdAt).toLocaleString();
+        const note = (r.metadata && r.metadata.note) ? ` • ${escapeHtml(r.metadata.note)}` : '';
+        return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; background:#0e1426; margin:8px 0;">
+          <div class="row" style="justify-content:space-between;">
+            <div><span class="pill" style="border-color:#1b7f5d; color:#8FF0D1;">SETTLEMENT</span> <b>${fromN}</b> paid <b>${toN}</b>: $${fmt(r.type.amount)}${note}</div>
+            <div class="muted">${when}</div>
+          </div>
+        </div>`;
+      }).join('');
+      setEl.innerHTML = setHeader + (setCards || '<div class="muted">No settlements yet</div>');
+    }
+
+    function fmt(n){ return Number(n).toFixed(2); }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
+
+    function renderMemberNets(totals){
+      const el = document.getElementById('memberNets');
+      const gid = document.getElementById('balGroup').value;
+      const g = groups.find(x=>x.id===gid);
+      const memberIds = g? g.memberIds:[];
+      const rows = memberIds.map(id => {
+        const name = users.find(u=>u.id===id)?.name||id;
+        const net = +(totals[id]||0).toFixed(2);
+        const color = net > 0 ? '#8FF0D1' : net < 0 ? '#FF9BA1' : '#9aa3b2';
+        const label = net > 0 ? 'is owed' : net < 0 ? 'owes' : 'settled';
+        return `<div class="row" style="justify-content:space-between; border:1px solid var(--border); border-radius:10px; padding:8px; margin:6px 0; background:#0e1426;">
+          <div><b>${name}</b></div>
+          <div class="muted">${label}</div>
+          <div style="color:${color}">$${Math.abs(net).toFixed(2)}</div>
+        </div>`;
+      }).join('');
+      el.innerHTML = rows || '<div class="muted">No members</div>';
+    }
+
+    function round2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
+    function computePreviewShares(type, amount, splits){
+      if(!amount || amount<=0) return splits.map(s => ({ userId:s.userId, amount:0 }));
+      if(type==='EQUAL'){
+        const each = round2(amount / splits.length);
+        const arr = splits.map(s => ({ userId:s.userId, amount: each }));
+        const diff = round2(amount - arr.reduce((a,b)=>a+b.amount,0));
+        if(arr.length) arr[arr.length-1].amount = round2(arr[arr.length-1].amount + diff);
+        return arr;
+      }
+      if(type==='EXACT'){
+        return splits.map(s => ({ userId:s.userId, amount: round2(s.value||0) }));
+      }
+      if(type==='PERCENT'){
+        const arr = splits.map(s => ({ userId:s.userId, amount: round2(((s.value||0)/100) * amount) }));
+        const diff = round2(amount - arr.reduce((a,b)=>a+b.amount,0));
+        if(arr.length) arr[arr.length-1].amount = round2(arr[arr.length-1].amount + diff);
+        return arr;
+      }
+      return splits.map(s => ({ userId:s.userId, amount:0 }));
+    }
+
+    function renderPreview(){
+      const gid = document.getElementById('expGroup').value;
+      const g = groups.find(x=>x.id===gid);
+      if(!g) { document.getElementById('splitPreview').innerHTML = '<div class="muted">Select a group to preview shares.</div>'; return; }
+      const type = document.getElementById('expType').value;
+      const amount = parseFloat(document.getElementById('expAmount').value||'0');
+      const inputs = [...document.querySelectorAll('[data-split-user]')];
+      const splits = g.memberIds.map(id => ({ userId:id, value: parseFloat((inputs.find(i=>i.getAttribute('data-split-user')===id)?.value)||'0') }));
+      const shares = computePreviewShares(type, amount, splits);
+      const rows = shares.map(s => {
+        const name = users.find(u=>u.id===s.userId)?.name||s.userId;
+        return `<div class="row" style="justify-content:space-between; border:1px dashed var(--border); border-radius:10px; padding:6px 8px; margin:4px 0;">
+          <div>${name}</div><div>$${(s.amount||0).toFixed(2)}</div>
+        </div>`;
+      }).join('');
+      document.getElementById('splitPreview').innerHTML = rows || '<div class="muted">No members to split</div>';
+    }
+
+    async function quickSettle(groupId, fromUserId, toUserId, amount){
+      try{
+        await api.post('/settlements', { groupId, fromUserId, toUserId, amount, note: 'suggested' });
+        await refreshBalancesAndLedger(groupId);
+      }catch(e){ alert(e.message || e); }
+    }
+
+    async function settleAll(){
+      const gid = document.getElementById('balGroup').value;
+      if(!gid) return;
+      const summary = await api.get(`/balances/${gid}`);
+      for(const e of summary.simplified){
+        await api.post('/settlements', { groupId: gid, fromUserId: e.fromUserId, toUserId: e.toUserId, amount: e.amount, note: 'bulk settle' });
+      }
+      await refreshBalancesAndLedger(gid);
+      alert('All suggested settlements recorded');
+    }
+
+    async function refreshBalancesAndLedger(groupId){
+      const balSelect = document.getElementById('balGroup');
+      if(groupId) balSelect.value = groupId;
+      await loadBalances();
+      await loadLedger();
+    }
+
+    async function refreshAll(){
+      await loadUsers();
+      await loadGroups();
+      syncSelectors();
+      await loadBalances();
+      await loadLedger();
+    }
+
+    async function seedSample(){
+      try{
+        const a = await api.post('/users', { name: 'Alice' });
+        const b = await api.post('/users', { name: 'Bob' });
+        const c = await api.post('/users', { name: 'Cara' });
+        const g = await api.post('/groups', { name: 'Trip', memberIds: [a.id, b.id, c.id] });
+        await api.post('/expenses', { groupId:g.id, payerId:a.id, amount: 120, description:'Hotel', splitType:'EQUAL', splits:[
+          { userId:a.id, value:1 },{ userId:b.id, value:1 },{ userId:c.id, value:1 }
+        ]});
+        document.getElementById('expGroup').value = g.id;
+        document.getElementById('setGroup').value = g.id;
+        document.getElementById('balGroup').value = g.id;
+        onGroupChange(); onSetGroupChange();
+        await refreshBalancesAndLedger(g.id);
+      }catch(e){ alert(e.message || e); }
+    }
+
+    async function resetAll(){
+      if(!confirm('This will delete ALL users, groups, expenses, settlements, and ledger entries. Continue?')) return;
+      await api.post('/admin/reset', {});
+      await refreshAll();
+      document.getElementById('splitPreview').innerHTML = '<div class="muted">Select a group to preview shares.</div>';
+      document.getElementById('memberNets').innerHTML = '<div class="muted">No members</div>';
+      document.getElementById('simplified').innerHTML = '';
+      document.getElementById('usersList').innerHTML = '';
+      document.getElementById('groupsList').innerHTML = '';
+      alert('All data cleared. Start fresh.');
+    }
+
+    init();
+  </script>
+</body>
+</html>
