@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = '/api';
 
 export default function Home() {
   const [users, setUsers] = useState([]);
@@ -13,6 +13,15 @@ export default function Home() {
   const [newUserName, setNewUserName] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
+  
+  // Expense form state
+  const [expenseForm, setExpenseForm] = useState({
+    payerId: '',
+    amount: '',
+    description: '',
+    splitType: 'EQUAL'
+  });
+  const [calculationBreakdown, setCalculationBreakdown] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -66,27 +75,69 @@ export default function Home() {
     fetchGroups();
   };
 
-  const addExpense = async (groupId) => {
-    const payerId = prompt('Payer user ID:');
-    const amount = parseFloat(prompt('Amount:'));
-    const description = prompt('Description (optional):');
+  const calculateExpenseBreakdown = (groupId, payerId, amount, splitType) => {
+    if (!amount || amount <= 0) return null;
     const group = groups.find(g => g.id === groupId);
+    if (!group) return null;
     
-    await fetch(`${API_URL}/expenses`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        groupId,
-        payerId,
-        amount,
-        description,
-        splitType: 'EQUAL',
-        splits: group.memberIds.map(id => ({ userId: id, value: 1 }))
-      })
+    const breakdown = {};
+    const perPerson = amount / group.memberIds.length;
+    
+    group.memberIds.forEach(memberId => {
+      if (memberId === payerId) {
+        breakdown[memberId] = {
+          userName: users.find(u => u.id === memberId)?.name || memberId,
+          paid: amount,
+          share: perPerson,
+          owes: perPerson - amount < -0.01 ? Math.abs(amount - perPerson) : 0,
+          owed: amount - perPerson > 0.01 ? amount - perPerson : 0
+        };
+      } else {
+        breakdown[memberId] = {
+          userName: users.find(u => u.id === memberId)?.name || memberId,
+          paid: 0,
+          share: perPerson,
+          owes: perPerson > 0.01 ? perPerson : 0,
+          owed: 0
+        };
+      }
     });
     
-    fetchBalances(groupId);
-    fetchLedger(groupId);
+    return breakdown;
+  };
+
+  const addExpense = async (e) => {
+    e.preventDefault();
+    if (!expenseForm.payerId || !expenseForm.amount) {
+      alert('Select payer and amount');
+      return;
+    }
+    
+    const group = groups.find(g => g.id === selectedGroup.id);
+    
+    try {
+      const res = await fetch(`${API_URL}/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: selectedGroup.id,
+          payerId: expenseForm.payerId,
+          amount: parseFloat(expenseForm.amount),
+          description: expenseForm.description,
+          splitType: expenseForm.splitType,
+          splits: group.memberIds.map(id => ({ userId: id, value: 1 }))
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to add expense');
+      
+      setExpenseForm({ payerId: '', amount: '', description: '', splitType: 'EQUAL' });
+      setCalculationBreakdown(null);
+      fetchBalances(selectedGroup.id);
+      fetchLedger(selectedGroup.id);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
   };
 
   const selectGroup = (group) => {
@@ -199,64 +250,171 @@ export default function Home() {
         {/* Selected Group Details */}
         {selectedGroup && (
           <div className="mt-6 bg-gray-800 p-6 rounded-lg">
-            <h2 className="text-2xl font-bold mb-4">Group: {selectedGroup.name}</h2>
-            <button
-              onClick={() => addExpense(selectedGroup.id)}
-              className="mb-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded"
-            >
-              Add Expense (Equal Split)
-            </button>
+            <h2 className="text-2xl font-bold mb-6">📊 Group: {selectedGroup.name}</h2>
+            
+            {/* Add Expense Form - On Page */}
+            <div className="mb-8 bg-gray-700 p-6 rounded-lg">
+              <h3 className="text-xl font-bold mb-4">➕ Add Expense</h3>
+              <form onSubmit={addExpense} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Who paid?</label>
+                  <select
+                    value={expenseForm.payerId}
+                    onChange={(e) => {
+                      setExpenseForm({ ...expenseForm, payerId: e.target.value });
+                      setCalculationBreakdown(null);
+                    }}
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                    required
+                  >
+                    <option value="">-- Select Payer --</option>
+                    {selectedGroup.memberIds.map(memberId => {
+                      const user = users.find(u => u.id === memberId);
+                      return (
+                        <option key={memberId} value={memberId}>
+                          {user?.name || memberId}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Amount ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={expenseForm.amount}
+                    onChange={(e) => {
+                      setExpenseForm({ ...expenseForm, amount: e.target.value });
+                      if (expenseForm.payerId && e.target.value) {
+                        setCalculationBreakdown(
+                          calculateExpenseBreakdown(selectedGroup.id, expenseForm.payerId, parseFloat(e.target.value), 'EQUAL')
+                        );
+                      } else {
+                        setCalculationBreakdown(null);
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Description (optional)</label>
+                  <input
+                    type="text"
+                    value={expenseForm.description}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                    placeholder="e.g., Dinner at restaurant"
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 font-bold rounded"
+                >
+                  Add Expense
+                </button>
+              </form>
+
+              {/* Visible Calculation Breakdown */}
+              {calculationBreakdown && (
+                <div className="mt-6 bg-gray-600 p-4 rounded border-l-4 border-yellow-400">
+                  <h4 className="font-bold mb-3 text-yellow-300">📐 How This Expense is Split:</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="text-gray-200">
+                      <span className="font-semibold">${expenseForm.amount}</span> split equally among{' '}
+                      <span className="font-semibold">{selectedGroup.memberIds.length} people</span>
+                    </div>
+                    <div className="text-gray-300">
+                      = ${(parseFloat(expenseForm.amount) / selectedGroup.memberIds.length).toFixed(2)} per person
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {Object.entries(calculationBreakdown).map(([uid, data]) => (
+                      <div key={uid} className="bg-gray-500 p-2 rounded">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold">{data.userName}</span>
+                          <div className="text-right">
+                            {data.owed > 0 && (
+                              <span className="text-green-300 font-bold">+${data.owed.toFixed(2)} (owed back)</span>
+                            )}
+                            {data.owes > 0 && (
+                              <span className="text-red-300 font-bold">-${data.owes.toFixed(2)} (owes)</span>
+                            )}
+                            {data.owed === 0 && data.owes === 0 && (
+                              <span className="text-gray-300">Settlement</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Balances */}
             {balances && (
-              <div className="mb-6 bg-gray-700 p-4 rounded">
+              <div className="mb-6 bg-gray-700 p-6 rounded">
                 <h3 className="text-xl font-bold mb-4">💰 Balances & Settlements</h3>
                 
-                <div className="mb-4">
-                  <h4 className="font-semibold mb-2 text-sm text-gray-300">Who owes / is owed (Net):</h4>
-                  <ul className="space-y-2 mb-4">
-                    {Object.entries(balances.totalsByUser).map(([uid, amt]) => {
-                      const user = users.find(u => u.id === uid);
+                <div className="mb-6">
+                  <h4 className="font-semibold mb-3 text-gray-300">👥 Who owes / is owed (Net):</h4>
+                  <div className="space-y-2">
+                    {selectedGroup.memberIds.map(memberId => {
+                      const user = users.find(u => u.id === memberId);
+                      const amt = balances.totalsByUser[memberId] || 0;
                       let status = '';
                       let color = '';
                       if (amt > 0.01) {
                         status = 'should receive';
-                        color = 'text-green-400';
+                        color = 'text-green-400 bg-green-900';
                       } else if (amt < -0.01) {
                         status = 'owes';
-                        color = 'text-red-400';
+                        color = 'text-red-400 bg-red-900';
                       } else {
                         status = 'settled';
-                        color = 'text-gray-400';
+                        color = 'text-gray-400 bg-gray-600';
                       }
                       return (
-                        <li key={uid} className={`p-2 bg-gray-600 rounded flex justify-between items-center`}>
-                          <span>{user?.name || uid}</span>
-                          <span className={`font-bold ${color}`}>{status} ${Math.abs(amt).toFixed(2)}</span>
-                        </li>
+                        <div key={memberId} className={`p-3 rounded flex justify-between items-center ${color}`}>
+                          <span className="font-semibold">{user?.name}</span>
+                          <div className="text-right">
+                            <div className="text-sm">{status}</div>
+                            <div className="font-bold text-lg">${Math.abs(amt).toFixed(2)}</div>
+                          </div>
+                        </div>
                       );
                     })}
-                  </ul>
+                  </div>
                 </div>
 
                 <div>
-                  <h4 className="font-semibold mb-2 text-sm text-gray-300">Minimum Payments to Settle:</h4>
+                  <h4 className="font-semibold mb-3 text-gray-300">💸 Minimum Payments to Settle:</h4>
                   {balances.simplified.length === 0 ? (
-                    <p className="text-gray-400 text-sm">Everyone is settled! ✓</p>
+                    <p className="text-green-400 font-semibold text-center py-4">✅ Everyone is settled!</p>
                   ) : (
-                    <ul className="space-y-2">
+                    <div className="space-y-2">
                       {balances.simplified.map((edge, i) => {
                         const fromUser = users.find(u => u.id === edge.fromUserId);
                         const toUser = users.find(u => u.id === edge.toUserId);
                         return (
-                          <li key={i} className="p-2 bg-blue-600 rounded">
-                            <span className="font-semibold">{fromUser?.name}</span> pays 
-                            <span className="font-semibold"> {toUser?.name}</span>: 
-                            <span className="font-bold ml-2">${edge.amount.toFixed(2)}</span>
-                          </li>
+                          <div key={i} className="p-3 bg-blue-700 rounded flex justify-between items-center">
+                            <span>
+                              <span className="font-bold text-white">{fromUser?.name}</span>
+                              <span className="text-gray-300"> pays </span>
+                              <span className="font-bold text-white">{toUser?.name}</span>
+                            </span>
+                            <span className="font-bold text-yellow-300">${edge.amount.toFixed(2)}</span>
+                          </div>
                         );
                       })}
-                    </ul>
+                    </div>
                   )}
                 </div>
               </div>
@@ -265,50 +423,49 @@ export default function Home() {
             {/* Ledger */}
             <div>
               <h3 className="text-xl font-bold mb-4">📋 Transaction Ledger</h3>
-              <div className="space-y-3">
-                {ledger.length === 0 ? (
-                  <p className="text-gray-400">No transactions yet</p>
-                ) : (
-                  ledger.map(entry => {
+              {ledger.length === 0 ? (
+                <p className="text-gray-400 p-4 text-center">No transactions yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {ledger.map(entry => {
                     const fromUser = users.find(u => u.id === entry.type.fromUserId);
                     const toUser = users.find(u => u.id === entry.type.toUserId);
                     const isExpense = entry.type.kind === "EXPENSE_SPLIT";
-                    const isSettlement = entry.type.kind === "SETTLEMENT";
                     
                     return (
-                      <div key={entry.id} className={`p-3 rounded text-sm ${isSettlement ? 'bg-green-700' : 'bg-gray-700'}`}>
-                        <div className="flex justify-between items-start mb-1">
+                      <div key={entry.id} className={`p-4 rounded ${isExpense ? 'bg-yellow-900' : 'bg-green-800'}`}>
+                        <div className="flex justify-between items-start mb-2">
                           <div>
-                            <span className="font-bold">{isExpense ? '🧾 EXPENSE' : '✓ SETTLEMENT'}</span>
+                            <span className="font-bold text-lg">{isExpense ? '🧾 EXPENSE' : '✓ SETTLEMENT'}</span>
                             {entry.metadata?.description && (
-                              <span className="text-gray-300 ml-2">• {entry.metadata.description}</span>
+                              <span className="text-gray-300 ml-3">• {entry.metadata.description}</span>
                             )}
                             {entry.metadata?.total && (
-                              <span className="text-gray-400 ml-2">• ${entry.metadata.total.toFixed(2)}</span>
+                              <span className="text-gray-300 ml-3">Total: ${entry.metadata.total.toFixed(2)}</span>
                             )}
                           </div>
                           <span className="text-gray-400 text-xs">{new Date(entry.createdAt).toLocaleString()}</span>
                         </div>
-                        <div className="text-gray-200">
+                        <div className="text-gray-100 text-sm">
                           {isExpense ? (
                             <>
                               <span className="font-semibold">{fromUser?.name}</span> owes 
-                              <span className="font-semibold"> {toUser?.name}</span>: 
-                              <span className="ml-2 font-bold text-yellow-300">${entry.type.amount.toFixed(2)}</span>
+                              <span className="font-semibold"> {toUser?.name}</span> 
+                              <span className="ml-3 font-bold text-yellow-300">${entry.type.amount.toFixed(2)}</span>
                             </>
                           ) : (
                             <>
                               <span className="font-semibold">{fromUser?.name}</span> paid 
-                              <span className="font-semibold"> {toUser?.name}</span>: 
-                              <span className="ml-2 font-bold text-green-300">${entry.type.amount.toFixed(2)}</span>
+                              <span className="font-semibold"> {toUser?.name}</span> 
+                              <span className="ml-3 font-bold text-green-300">${entry.type.amount.toFixed(2)}</span>
                             </>
                           )}
                         </div>
                       </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
