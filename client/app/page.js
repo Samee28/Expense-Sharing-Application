@@ -22,6 +22,13 @@ export default function Home() {
     splitType: 'EQUAL'
   });
   const [calculationBreakdown, setCalculationBreakdown] = useState(null);
+  
+  // Settlement form state
+  const [settlementForm, setSettlementForm] = useState({
+    fromUserId: '',
+    toUserId: '',
+    amount: ''
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -140,6 +147,36 @@ export default function Home() {
     }
   };
 
+  const addSettlement = async (e) => {
+    e.preventDefault();
+    if (!settlementForm.fromUserId || !settlementForm.toUserId || !settlementForm.amount) {
+      alert('Select both users and amount');
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/settlements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: selectedGroup.id,
+          fromUserId: settlementForm.fromUserId,
+          toUserId: settlementForm.toUserId,
+          amount: parseFloat(settlementForm.amount),
+          note: 'Payment settlement'
+        })
+      });
+      
+      if (!res.ok) throw new Error('Failed to record settlement');
+      
+      setSettlementForm({ fromUserId: '', toUserId: '', amount: '' });
+      fetchBalances(selectedGroup.id);
+      fetchLedger(selectedGroup.id);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
   const selectGroup = (group) => {
     setSelectedGroup(group);
     fetchBalances(group.id);
@@ -160,7 +197,6 @@ export default function Home() {
       <div className="max-w-7xl mx-auto">
         <header className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Expense Sharing App</h1>
-          <p className="text-gray-400">JavaScript + React + Next.js Frontend</p>
           <button 
             onClick={resetData}
             className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded"
@@ -303,6 +339,19 @@ export default function Home() {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-semibold mb-2">Split Type</label>
+                  <select
+                    value={expenseForm.splitType}
+                    onChange={(e) => setExpenseForm({ ...expenseForm, splitType: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                  >
+                    <option value="EQUAL">Equal Split (divide equally)</option>
+                    <option value="EXACT">Exact Amount (specify amounts)</option>
+                    <option value="PERCENT">Percentage (specify percentages)</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-sm font-semibold mb-2">Description (optional)</label>
                   <input
                     type="text"
@@ -356,6 +405,73 @@ export default function Home() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Settlement Form */}
+            <div className="mb-8 bg-gray-700 p-6 rounded-lg">
+              <h3 className="text-xl font-bold mb-4">✅ Record Payment / Settlement</h3>
+              <form onSubmit={addSettlement} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Who is paying?</label>
+                  <select
+                    value={settlementForm.fromUserId}
+                    onChange={(e) => setSettlementForm({ ...settlementForm, fromUserId: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                    required
+                  >
+                    <option value="">-- Select Payer --</option>
+                    {selectedGroup.memberIds.map(memberId => {
+                      const user = users.find(u => u.id === memberId);
+                      return (
+                        <option key={memberId} value={memberId}>
+                          {user?.name || memberId}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Who is receiving payment?</label>
+                  <select
+                    value={settlementForm.toUserId}
+                    onChange={(e) => setSettlementForm({ ...settlementForm, toUserId: e.target.value })}
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                    required
+                  >
+                    <option value="">-- Select Receiver --</option>
+                    {selectedGroup.memberIds.map(memberId => {
+                      const user = users.find(u => u.id === memberId);
+                      return (
+                        <option key={memberId} value={memberId}>
+                          {user?.name || memberId}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Amount ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settlementForm.amount}
+                    onChange={(e) => setSettlementForm({ ...settlementForm, amount: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 bg-gray-600 rounded"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 font-bold rounded"
+                >
+                  Record Settlement
+                </button>
+              </form>
             </div>
 
             {/* Balances */}
