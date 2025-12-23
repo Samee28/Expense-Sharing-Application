@@ -21,6 +21,7 @@ export default function Home() {
     description: '',
     splitType: 'EQUAL'
   });
+  const [customSplits, setCustomSplits] = useState({}); // For EXACT amounts or PERCENT
   const [calculationBreakdown, setCalculationBreakdown] = useState(null);
   
   // Settlement form state
@@ -82,33 +83,51 @@ export default function Home() {
     fetchGroups();
   };
 
-  const calculateExpenseBreakdown = (groupId, payerId, amount, splitType) => {
+  const calculateExpenseBreakdown = (groupId, payerId, amount, splitType, splits) => {
     if (!amount || amount <= 0) return null;
     const group = groups.find(g => g.id === groupId);
     if (!group) return null;
     
     const breakdown = {};
-    const perPerson = amount / group.memberIds.length;
+    let perPerson = 0;
     
-    group.memberIds.forEach(memberId => {
-      if (memberId === payerId) {
+    if (splitType === 'EQUAL') {
+      perPerson = amount / group.memberIds.length;
+      group.memberIds.forEach(memberId => {
+        const share = perPerson;
         breakdown[memberId] = {
           userName: users.find(u => u.id === memberId)?.name || memberId,
-          paid: amount,
-          share: perPerson,
-          owes: perPerson - amount < -0.01 ? Math.abs(amount - perPerson) : 0,
-          owed: amount - perPerson > 0.01 ? amount - perPerson : 0
+          paid: memberId === payerId ? amount : 0,
+          share: share,
+          owes: memberId === payerId ? 0 : share,
+          owed: memberId === payerId ? amount - share : 0
         };
-      } else {
+      });
+    } else if (splitType === 'EXACT') {
+      group.memberIds.forEach(memberId => {
+        const share = parseFloat(splits[memberId] || 0);
         breakdown[memberId] = {
           userName: users.find(u => u.id === memberId)?.name || memberId,
-          paid: 0,
-          share: perPerson,
-          owes: perPerson > 0.01 ? perPerson : 0,
-          owed: 0
+          paid: memberId === payerId ? amount : 0,
+          share: share,
+          owes: memberId === payerId ? 0 : share,
+          owed: memberId === payerId ? amount - share : 0
         };
-      }
-    });
+      });
+    } else if (splitType === 'PERCENT') {
+      group.memberIds.forEach(memberId => {
+        const percent = parseFloat(splits[memberId] || 0);
+        const share = (amount * percent) / 100;
+        breakdown[memberId] = {
+          userName: users.find(u => u.id === memberId)?.name || memberId,
+          paid: memberId === payerId ? amount : 0,
+          share: share,
+          percent: percent,
+          owes: memberId === payerId ? 0 : share,
+          owed: memberId === payerId ? amount - share : 0
+        };
+      });
+    }
     
     return breakdown;
   };
@@ -121,6 +140,21 @@ export default function Home() {
     }
     
     const group = groups.find(g => g.id === selectedGroup.id);
+    let splits;
+    
+    if (expenseForm.splitType === 'EQUAL') {
+      splits = group.memberIds.map(id => ({ userId: id, value: 1 }));
+    } else if (expenseForm.splitType === 'EXACT') {
+      splits = group.memberIds.map(id => ({ 
+        userId: id, 
+        value: parseFloat(customSplits[id] || 0) 
+      }));
+    } else if (expenseForm.splitType === 'PERCENT') {
+      splits = group.memberIds.map(id => ({ 
+        userId: id, 
+        value: parseFloat(customSplits[id] || 0) 
+      }));
+    }
     
     try {
       const res = await fetch(`${API_URL}/expenses`, {
@@ -132,13 +166,14 @@ export default function Home() {
           amount: parseFloat(expenseForm.amount),
           description: expenseForm.description,
           splitType: expenseForm.splitType,
-          splits: group.memberIds.map(id => ({ userId: id, value: 1 }))
+          splits: splits
         })
       });
       
       if (!res.ok) throw new Error('Failed to add expense');
       
       setExpenseForm({ payerId: '', amount: '', description: '', splitType: 'EQUAL' });
+      setCustomSplits({});
       setCalculationBreakdown(null);
       fetchBalances(selectedGroup.id);
       fetchLedger(selectedGroup.id);
@@ -342,7 +377,11 @@ export default function Home() {
                   <label className="block text-sm font-semibold mb-2">Split Type</label>
                   <select
                     value={expenseForm.splitType}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, splitType: e.target.value })}
+                    onChange={(e) => {
+                      setExpenseForm({ ...expenseForm, splitType: e.target.value });
+                      setCustomSplits({});
+                      setCalculationBreakdown(null);
+                    }}
                     className="w-full px-3 py-2 bg-gray-600 rounded"
                   >
                     <option value="EQUAL">Equal Split (divide equally)</option>
@@ -350,6 +389,66 @@ export default function Home() {
                     <option value="PERCENT">Percentage (specify percentages)</option>
                   </select>
                 </div>
+
+                {/* Custom Split Inputs for EXACT or PERCENT */}
+                {(expenseForm.splitType === 'EXACT' || expenseForm.splitType === 'PERCENT') && (
+                  <div className="bg-gray-600 p-4 rounded">
+                    <h4 className="font-semibold mb-3 text-sm">
+                      {expenseForm.splitType === 'EXACT' ? 'Specify amount for each person:' : 'Specify percentage for each person:'}
+                    </h4>
+                    <div className="space-y-2">
+                      {selectedGroup.memberIds.map(memberId => {
+                        const user = users.find(u => u.id === memberId);
+                        return (
+                          <div key={memberId} className="flex items-center gap-2">
+                            <label className="flex-1 text-sm">{user?.name || memberId}</label>
+                            <input
+                              type="number"
+                              step={expenseForm.splitType === 'EXACT' ? '0.01' : '0.1'}
+                              min="0"
+                              value={customSplits[memberId] || ''}
+                              onChange={(e) => {
+                                setCustomSplits({ ...customSplits, [memberId]: e.target.value });
+                                if (expenseForm.payerId && expenseForm.amount) {
+                                  setCalculationBreakdown(
+                                    calculateExpenseBreakdown(
+                                      selectedGroup.id, 
+                                      expenseForm.payerId, 
+                                      parseFloat(expenseForm.amount), 
+                                      expenseForm.splitType,
+                                      { ...customSplits, [memberId]: e.target.value }
+                                    )
+                                  );
+                                }
+                              }}
+                              placeholder={expenseForm.splitType === 'EXACT' ? '0.00' : '0'}
+                              className="w-24 px-2 py-1 bg-gray-700 rounded text-sm"
+                            />
+                            <span className="text-xs text-gray-400">
+                              {expenseForm.splitType === 'PERCENT' && '%'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {expenseForm.splitType === 'PERCENT' && (
+                      <div className="mt-2 text-xs text-gray-400">
+                        Total: {Object.values(customSplits).reduce((sum, val) => sum + parseFloat(val || 0), 0).toFixed(1)}% 
+                        {Object.values(customSplits).reduce((sum, val) => sum + parseFloat(val || 0), 0) === 100 && 
+                          <span className="text-green-400 ml-2">✓</span>
+                        }
+                      </div>
+                    )}
+                    {expenseForm.splitType === 'EXACT' && expenseForm.amount && (
+                      <div className="mt-2 text-xs text-gray-400">
+                        Total: ${Object.values(customSplits).reduce((sum, val) => sum + parseFloat(val || 0), 0).toFixed(2)} / ${expenseForm.amount}
+                        {Math.abs(Object.values(customSplits).reduce((sum, val) => sum + parseFloat(val || 0), 0) - parseFloat(expenseForm.amount)) < 0.01 && 
+                          <span className="text-green-400 ml-2">✓</span>
+                        }
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-semibold mb-2">Description (optional)</label>
@@ -375,20 +474,38 @@ export default function Home() {
                 <div className="mt-6 bg-gray-600 p-4 rounded border-l-4 border-yellow-400">
                   <h4 className="font-bold mb-3 text-yellow-300">📐 How This Expense is Split:</h4>
                   <div className="space-y-2 text-sm">
-                    <div className="text-gray-200">
-                      <span className="font-semibold">${expenseForm.amount}</span> split equally among{' '}
-                      <span className="font-semibold">{selectedGroup.memberIds.length} people</span>
-                    </div>
-                    <div className="text-gray-300">
-                      = ${(parseFloat(expenseForm.amount) / selectedGroup.memberIds.length).toFixed(2)} per person
-                    </div>
+                    {expenseForm.splitType === 'EQUAL' && (
+                      <>
+                        <div className="text-gray-200">
+                          <span className="font-semibold">${expenseForm.amount}</span> split equally among{' '}
+                          <span className="font-semibold">{selectedGroup.memberIds.length} people</span>
+                        </div>
+                        <div className="text-gray-300">
+                          = ${(parseFloat(expenseForm.amount) / selectedGroup.memberIds.length).toFixed(2)} per person
+                        </div>
+                      </>
+                    )}
+                    {expenseForm.splitType === 'EXACT' && (
+                      <div className="text-gray-200">
+                        <span className="font-semibold">${expenseForm.amount}</span> split by exact amounts
+                      </div>
+                    )}
+                    {expenseForm.splitType === 'PERCENT' && (
+                      <div className="text-gray-200">
+                        <span className="font-semibold">${expenseForm.amount}</span> split by percentages
+                      </div>
+                    )}
                   </div>
                   <div className="mt-4 space-y-2">
                     {Object.entries(calculationBreakdown).map(([uid, data]) => (
                       <div key={uid} className="bg-gray-500 p-2 rounded">
                         <div className="flex justify-between items-center">
                           <span className="font-semibold">{data.userName}</span>
-                          <div className="text-right">
+                          <div className="text-right text-sm">
+                            <div className="text-gray-300">
+                              Share: ${data.share.toFixed(2)}
+                              {data.percent !== undefined && ` (${data.percent}%)`}
+                            </div>
                             {data.owed > 0 && (
                               <span className="text-green-300 font-bold">+${data.owed.toFixed(2)} (owed back)</span>
                             )}
@@ -396,7 +513,7 @@ export default function Home() {
                               <span className="text-red-300 font-bold">-${data.owes.toFixed(2)} (owes)</span>
                             )}
                             {data.owed === 0 && data.owes === 0 && (
-                              <span className="text-gray-300">Settlement</span>
+                              <span className="text-gray-300">Even</span>
                             )}
                           </div>
                         </div>
