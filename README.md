@@ -1,6 +1,6 @@
-# Expense Sharing API (TypeScript, React-ready)
+# Expense Sharing App (JavaScript + React + Next.js)
 
-Simple Splitwise-style backend written in TypeScript. Clear math, transparent ledger, and an API that a React + TypeScript frontend can use immediately. The bundled UI is plain HTML/JS just to demo the flows.
+Splitwise-style expense sharing application. **Clean pure Node.js backend** (no frameworks), React + Next.js frontend with Tailwind CSS. Clear split calculations, transparent ledger, and real-time balance tracking.
 
 **What it does**
 - Create users and groups
@@ -10,28 +10,42 @@ Simple Splitwise-style backend written in TypeScript. Clear math, transparent le
 
 **How the math works (human words)**
 - One person pays; the total is split across members by equal/exact/percent.
-- For each member, the ledger records “member owes payer X”.
+- For each member, the ledger records "member owes payer X".
 - When someone pays back, a settlement entry reduces that owed amount.
 - Balances show net per person (positive = should receive; negative = should pay).
 - A simplified view suggests the minimal set of payments to settle everyone.
 
 ## Run it
+
+### Backend (API Server - Pure Node.js, no frameworks)
 ```powershell
 npm install
 npm run dev
-start http://localhost:3000
 ```
-- “Add Sample Data” seeds users, groups, and expenses for a quick demo.
-- “Reset All Data” wipes in-memory data.
+Server runs on `http://localhost:3000`
+
+### Frontend (Next.js)
+```powershell
+cd client
+npm install
+npm run dev
+```
+Frontend runs on `http://localhost:3001`
+
+- Open `http://localhost:3001` in your browser
+- Create users, groups, add expenses, view balances
+- Use "Reset All Data" to wipe in-memory data
 
 ## Tech stack
-- Backend: Node.js + Express + TypeScript + Zod
-- Tests: Vitest + Supertest
-- UI (demo): Plain HTML/JS; swap in React + TypeScript without backend changes
+- **Backend**: Node.js + pure built-in `http` module + JavaScript + Zod validation
+  - No Express, no frameworks—just clean Node.js HTTP server with simple routing
+- **Frontend**: React + Next.js 16 + JavaScript + Tailwind CSS
+- **Tests**: Vitest + Supertest
+- **Storage**: In-memory (default), optional Prisma ORM for SQL/NoSQL
 
 ## Calculations in plain language
-- Ledger-first: every split and settlement is written as “A owes B X”.
-- Balances: sum the ledger to get each person’s net.
+- Ledger-first: every split and settlement is written as "A owes B X".
+- Balances: sum the ledger to get each person's net.
 - Simplify: compute minimal payments to settle all nets.
 - Rounding: amounts are kept to 2 decimals; final participant absorbs tiny drift.
 
@@ -55,5 +69,15 @@ npm test
 ## Optional database
 - Prisma ORM; SQLite by default, can switch to PostgreSQL/MySQL.
 - Set `DATABASE_URL` in `.env` (see `.env.example`).
-- In-memory is default; swapping to DB doesn’t change the API or UI.
+- In-memory is default; swapping to DB doesn't change the API or UI.
+
+## Project structure
+```
+/src          - Backend JavaScript (pure Node.js HTTP + routing, services, domain logic)
+/src/http     - Simple router utility (no Express)
+/client       - Next.js React frontend (Tailwind CSS, App Router)
+/tests        - Backend tests (Vitest + Supertest)
+/public       - Static HTML demo (legacy, optional)
+/prisma       - Database schema and migrations (optional)
+```
 

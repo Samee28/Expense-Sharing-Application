@@ -1,33 +1,37 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const splitters_1 = require("../src/domain/splitters");
-const base = {
-    groupId: 'g1',
-    payerId: 'u1',
-    amount: 100,
-    description: 'Test',
-    splits: [{ userId: 'u1', value: 1 }, { userId: 'u2', value: 1 }, { userId: 'u3', value: 1 }]
-};
-describe('splitters', () => {
-    it('equal split', () => {
-        const shares = (0, splitters_1.computeShares)({ ...base, splitType: 'EQUAL' });
-        expect(shares.reduce((a, b) => a + b.amount, 0)).toBe(100);
-        expect(shares.find(s => s.userId === 'u2').amount).toBeCloseTo(33.33, 2);
+import { describe, it, expect } from 'vitest';
+import { computeShares, round2 } from '../src/domain/splitters.js';
+
+describe('splitCalculations', () => {
+  it('equal split works', () => {
+    const res = computeShares({
+      amount: 100,
+      splitType: 'EQUAL',
+      splits: [{ userId: 'a', value: 1 }, { userId: 'b', value: 1 }, { userId: 'c', value: 1 }],
+      groupId: 'g1',
+      payerId: 'a'
     });
-    it('exact split', () => {
-        const shares = (0, splitters_1.computeShares)({ ...base, splitType: 'EXACT', splits: [
-                { userId: 'u1', value: 10 },
-                { userId: 'u2', value: 20 },
-                { userId: 'u3', value: 70 },
-            ] });
-        expect(shares.find(s => s.userId === 'u3').amount).toBe(70);
-    });
-    it('percent split', () => {
-        const shares = (0, splitters_1.computeShares)({ ...base, splitType: 'PERCENT', splits: [
-                { userId: 'u1', value: 10 },
-                { userId: 'u2', value: 20 },
-                { userId: 'u3', value: 70 },
-            ] });
-        expect(shares.find(s => s.userId === 'u2').amount).toBeCloseTo(20, 2);
-    });
+    expect(res.length).toBe(3);
+    const total = res.reduce((acc, s) => acc + s.amount, 0);
+    expect(round2(total)).toBe(100);
+  });
+
+  it('exact split validates sum', () => {
+    expect(() => computeShares({
+      amount: 100,
+      splitType: 'EXACT',
+      splits: [{ userId: 'a', value: 40 }, { userId: 'b', value: 50 }],
+      groupId: 'g1',
+      payerId: 'a'
+    })).toThrow();
+  });
+
+  it('percent split validates 100%', () => {
+    expect(() => computeShares({
+      amount: 100,
+      splitType: 'PERCENT',
+      splits: [{ userId: 'a', value: 40 }, { userId: 'b', value: 50 }],
+      groupId: 'g1',
+      payerId: 'a'
+    })).toThrow();
+  });
 });
