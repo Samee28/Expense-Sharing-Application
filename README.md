@@ -17,12 +17,6 @@
 - **Complete Transaction Ledger**: Every expense and settlement tracked with timestamps
 - **Real-time Calculation Preview**: See the split breakdown before adding an expense
 
-### User Experience
-- **On-page forms** (no popups) - add expenses and settlements directly
-- **Live calculation display** - see exactly how amounts are split
-- **Color-coded balances** - red (owes), green (should receive), gray (settled)
-- **Visual ledger** - expenses (🧾) and settlements (✓) clearly marked
-- **Single-host setup** - API rewrites for seamless frontend/backend integration
 
 ## 🚀 Quick Start
 
